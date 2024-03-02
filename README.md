@@ -1,2 +1,2 @@
 # MotionSimulationChair
-This repository encompasses the essential code for extracting telemetry data from the BeamNG driving simulation software. Additionally, it includes the code required for translating this telemetry data into motion commands for controlling the movement of the chair.
+This repository encompasses the essential code for simulating the motion of our motion simulation chair. The code provided in this repository will allow for three degrees of freedom (pitch, roll, and yaw).
