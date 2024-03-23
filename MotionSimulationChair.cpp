@@ -2,6 +2,19 @@
 
 #define motorInterfaceType AccelStepper::FULL2WIRE
 
+// Function definitions for C++ compiler
+void promptForExperience();
+void processExperienceChoice(const String& choice);
+void processAxisChoice(const String& axisChoice);
+void processSpeedInput(float speed);
+void processPositionInput(long position);
+void setMotorSpeed(AccelStepper& stepper, float speed);
+void setMotorPosition(AccelStepper& stepper, long position);
+void moveMotor(AccelStepper& stepper);
+void performFullExperienceMotion();
+void updateFullExperienceMotion();
+void checkMotionCompletion();
+
 // Motor pin definitions for each motor
 const int pitchMotorStepPin = 2;
 const int pitchMotorDirPin = 4;
