@@ -1,25 +1,25 @@
 #include <AccelStepper.h>
 
-#define motorInterfaceType AccelStepper::DRIVER
+#define motorInterfaceType AccelStepper::FULL2WIRE
 
 // Motor pin definitions for each motor
-const int pitchMotorStepPin = 9;
-const int pitchMotorDirPin = 8;
-const int pitchMotorEnablePin = 13;
+const int pitchMotorStepPin = 2;
+const int pitchMotorDirPin = 4;
 
 const int rollMotorStepPin = 10;
 const int rollMotorDirPin = 4;
-const int rollMotorEnablePin = 12;
 
 const int yawMotorStepPin = 11;
 const int yawMotorDirPin = 2;
-const int yawMotorEnablePin = 7;
 
 // Values used for the full motion experience
 int fullExperienceStep = 0;
-long maxPitchPosition = 4000;
-long maxRollPosition = 4000;
-long maxYawPosition = 4000;
+long maxPosPitchPosition = 4000;
+long maxPosRollPosition = 4000;
+long maxPosYawPosition = 4000;
+long maxNegPitchPosition = -4000;
+long maxNegRollPosition = -4000;
+long maxNegYawPosition = -4000;
 
 // Instantiate AccelStepper objects
 AccelStepper pitchStepper(motorInterfaceType, pitchMotorStepPin, pitchMotorDirPin);
@@ -51,16 +51,6 @@ void setup() {
   Serial.begin(9600);
   while (!Serial) ; // Wait for Serial port to connect
 
-  // Set up the Enable pins as outputs and enable the motors
-  pinMode(pitchMotorEnablePin, OUTPUT);
-  digitalWrite(pitchMotorEnablePin, HIGH);
-
-  pinMode(rollMotorEnablePin, OUTPUT);
-  digitalWrite(rollMotorEnablePin, HIGH);
-
-  pinMode(yawMotorEnablePin, OUTPUT);
-  digitalWrite(yawMotorEnablePin, HIGH);
-
   // Setup the steppers with initial speed and acceleration
   // Numbers will have to be adjusted
   pitchStepper.setMaxSpeed(1000);
@@ -91,13 +81,6 @@ void loop() {
         processAxisChoice(axisChoice);
       }
       break;
-    case WAIT_FOR_POSITION:
-      if (Serial.available()) {
-        String posInput = Serial.readStringUntil('\n');
-        long position = posInput.toInt();
-        processPositionInput(position);
-      }
-      break;
     case WAIT_FOR_SPEED:
       if (Serial.available()) {
         String speedInput = Serial.readStringUntil('\n');
@@ -105,9 +88,19 @@ void loop() {
         processSpeedInput(speed);
       }
       break;
+    case WAIT_FOR_POSITION:
+      if (Serial.available()) {
+        String posInput = Serial.readStringUntil('\n');
+        long position = posInput.toInt();
+        processPositionInput(position);
+      }
+      break;
     case PROCESSING:
       if (fullExperienceStep > 0) {
         updateFullExperienceMotion();
+      }
+      else {
+        moveMotor(*selectedStepper);
       }
       checkMotionCompletion();
       break;
@@ -172,11 +165,11 @@ void processSpeedInput(float speed) {
 
 // position is the value provided from the processSpeedInput function at the end 
 void processPositionInput(long position) {
-  // If the stepper is not null, the position is greater than 0, and the position does not exceed the position of 4000 for the motor, use the moveMotor function
+  // If the stepper is not null, the position is greater than 0, and the position does not exceed the position of 4000 for the motor, use the setMotorPosition function
   // to move the motor to the chosen position. Also, update the currentState to PROCESSING, as the motor is now moving and we do not want any user input.
   if (selectedStepper != NULL && position >= 0 && position <= 4000) { // Assuming 4000 is the max
     currentState = PROCESSING;
-    moveMotor(*selectedStepper, position);
+    setMotorPosition(*selectedStepper, position);
   } else {
     Serial.println("Position out of range. Please enter a value between 0 and 4000.");
     currentState = WAIT_FOR_POSITION;
@@ -190,11 +183,19 @@ void setMotorSpeed(AccelStepper& stepper, float speed) {
   Serial.println(speed);
 }
 
-// Function to move the motor to the desired position
-void moveMotor(AccelStepper& stepper, long position) {
+// Function to set the position for the motor to move to
+void setMotorPosition(AccelStepper& stepper, long position) {
+  currentState = PROCESSING;  
   stepper.moveTo(position);
   Serial.print("Moving to position: ");
   Serial.println(position);
+}
+
+// Function to move the motor to the desired position
+void moveMotor(AccelStepper& stepper) {
+    while (stepper.distanceToGo() != 0) {
+        stepper.run();
+    }
 }
 
 // Function to update the fullExperienceStep value to 1, so that the full experience can be started
@@ -207,46 +208,40 @@ void updateFullExperienceMotion() {
   // Called from the loop() function when in the PROCESSING state
   switch (fullExperienceStep) {
     case 1:
-      // Move pitch all the way up
-      if (!pitchStepper.isRunning()) { // Check if the stepper has stopped moving
-        pitchStepper.moveTo(maxPitchPosition);
-        fullExperienceStep++;
-      }
+      // Pitch up movement
+      setMotorPosition(pitchStepper, maxPosPitchPosition);
+      moveMotor(pitchStepper);
+      fullExperienceStep++;
       break;
     case 2:
-      // Move pitch all the way down
-      if (!pitchStepper.isRunning()) {
-        pitchStepper.moveTo(0);
-        fullExperienceStep++;
-      }
+      // Pitch down movement
+      setMotorPosition(pitchStepper, maxNegPitchPosition);
+      moveMotor(pitchStepper);
+      fullExperienceStep++;
       break;
     case 3:
-      // Move roll one side
-      if (!rollStepper.isRunning()) {
-        rollStepper.moveTo(maxRollPosition);
-        fullExperienceStep++;
-      }
+      // Roll right movement
+      setMotorPosition(rollStepper, maxPosRollPosition);
+      moveMotor(rollStepper);
+      fullExperienceStep++;
       break;
     case 4:
-      // Move roll other side
-      if (!rollStepper.isRunning()) {
-        rollStepper.moveTo(0);
-        fullExperienceStep++;
-      }
+      // Roll left movement
+      setMotorPosition(rollStepper, maxNegRollPosition);
+      moveMotor(rollStepper);
+      fullExperienceStep++;
       break;
     case 5:
-      // Move yaw one direction
-      if (!yawStepper.isRunning()) {
-        yawStepper.moveTo(maxYawPosition);
-        fullExperienceStep++;
-      }
+      // Yaw right movement
+      setMotorPosition(yawStepper, maxNegYawPosition);
+      moveMotor(yawStepper);
+      fullExperienceStep++;
       break;
     case 6:
-      // Move yaw other direction
-      if (!yawStepper.isRunning()) {
-        yawStepper.moveTo(0);
-        fullExperienceStep = 0; // End the sequence
-      }
+      // Yaw left movement
+      setMotorPosition(yawStepper, maxNegYawPosition);
+      moveMotor(yawStepper);
+      fullExperienceStep++;
       break;
   }
 }
@@ -258,5 +253,5 @@ void checkMotionCompletion() {
     Serial.println("Motion completed. Ready for new input.");
     currentState = WAIT_FOR_INPUT; // Go back to waiting for input
     promptForExperience(); // Prompt the user again for the experience they want
-  }
+  } 
 }
