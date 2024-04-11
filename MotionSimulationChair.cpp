@@ -1,270 +1,438 @@
-#include <AccelStepper.h>
+#include "FastAccelStepper.h"
 
-#define motorInterfaceType AccelStepper::FULL2WIRE
+// Define pins for the motors
+#define STEPPER1_STEP_PIN 6
+#define STEPPER1_DIR_PIN 3
 
-// Function definitions for C++ compiler
-void promptForExperience();
-void processExperienceChoice(const String& choice);
-void processAxisChoice(const String& axisChoice);
-void processSpeedInput(float speed);
-void processPositionInput(long position);
-void setMotorSpeed(AccelStepper& stepper, float speed);
-void setMotorPosition(AccelStepper& stepper, long position);
-void moveMotor(AccelStepper& stepper);
-void performFullExperienceMotion();
-void updateFullExperienceMotion();
-void checkMotionCompletion();
+#define STEPPER2_STEP_PIN 7
+#define STEPPER2_DIR_PIN 4
 
-// Motor pin definitions for each motor
-const int pitchMotorStepPin = 2;
-const int pitchMotorDirPin = 4;
+#define STEPPER3_STEP_PIN 8
+#define STEPPER3_DIR_PIN 5
 
-const int rollMotorStepPin = 10;
-const int rollMotorDirPin = 4;
+#define MAX_SPEED 80000
+#define MAX_ACCELERATION 10000
 
-const int yawMotorStepPin = 11;
-const int yawMotorDirPin = 2;
+#define MAX_POS_PITCH_POSITION 109 // 9.81/(360/(5 * 800))
+#define MAX_NEG_PITCH_POSITION -109
 
-// Values used for the full motion experience
-int fullExperienceStep = 0;
-long maxPosPitchPosition = 4000;
-long maxPosRollPosition = 4000;
-long maxPosYawPosition = 4000;
-long maxNegPitchPosition = -4000;
-long maxNegRollPosition = -4000;
-long maxNegYawPosition = -4000;
+#define MAX_POS_ROLL_POSITION 88 // 7.94/(360/(5 * 800))
+#define MAX_NEG_ROLL_POSITION -88
 
-// Instantiate AccelStepper objects
-AccelStepper pitchStepper(motorInterfaceType, pitchMotorStepPin, pitchMotorDirPin);
-AccelStepper rollStepper(motorInterfaceType, rollMotorStepPin, rollMotorDirPin);
-AccelStepper yawStepper(motorInterfaceType, yawMotorStepPin, yawMotorDirPin);
+#define MAX_POS_YAW_POSITION 500 // 45/(360/(5 * 800))
+#define MAX_NEG_YAW_POSITION -500
 
-// States to help navigate through simulating the motion
-/* Steps:
-   1. WAIT_FOR_INPUT: Does the user want to move in one axis or do they want a full experience?
-   2. WAIT_FOR_AXIS_CHOICE: If they want to move in one axis, which axis do they want to move in?
-   3. WAIT_FOR_POSITION: If they want to move in one axis, position would they like to move to?
-   4. WAIT_FOR_SPEED: If they want to move in one axis, what speed would they like to move at?
-   5. PROCESSING: Busy/In-Progres state to execute tasks
-*/
+// Create the engine and the steppers
+FastAccelStepperEngine engine = FastAccelStepperEngine();
+FastAccelStepper *stepper1 = nullptr;
+FastAccelStepper *stepper2 = nullptr;
+FastAccelStepper *stepper3 = nullptr;
+
+// Enumeration of states to structure the simulation process
 enum State {
   WAIT_FOR_INPUT,
   WAIT_FOR_AXIS_CHOICE,
   WAIT_FOR_POSITION,
   WAIT_FOR_SPEED,
-  PROCESSING,
+  PROCESSING
 };
 
 // Start at the first state
 State currentState = WAIT_FOR_INPUT;
-AccelStepper* selectedStepper = nullptr; // Pointer to the currently selected stepper
+
+FastAccelStepper *selectedStepper1 = nullptr;
+FastAccelStepper *selectedStepper2 = nullptr;
 String currentAxis = "";
+int32_t positionInSteps = 0;
 
 void setup() {
-  Serial.begin(9600);
-  while (!Serial) ; // Wait for Serial port to connect
+  Serial.begin(4800);
+  while (!Serial); // Wait for the Serial to start
+  engine.init(); // Start the engine
 
-  // Setup the steppers with initial speed and acceleration
-  // Numbers will have to be adjusted
-  pitchStepper.setMaxSpeed(1000);
-  pitchStepper.setAcceleration(200);
-  rollStepper.setMaxSpeed(1000);
-  rollStepper.setAcceleration(200);
-  yawStepper.setMaxSpeed(1000);
-  yawStepper.setAcceleration(200);
+  // Initialize pitch stepper
+  stepper1 = engine.stepperConnectToPin(STEPPER1_STEP_PIN);
+  if (stepper1) {
+    stepper1 -> setDirectionPin(STEPPER1_DIR_PIN);
+    stepper1 -> setSpeedInHz(6000); // steps/sec
+    stepper1 -> setAcceleration(10000); // steps/sec^2
+  }
+
+  // Initialize roll stepper
+  stepper2 = engine.stepperConnectToPin(STEPPER2_STEP_PIN);
+
+  if (stepper2) {
+    stepper2 -> setDirectionPin(STEPPER2_DIR_PIN);
+    stepper2 -> setSpeedInHz(6000); // steps/sec
+    stepper2 -> setAcceleration(10000); // steps/sec^2
+  }
+
+  // Initialize yaw stepper
+  stepper3 = engine.stepperConnectToPin(STEPPER3_STEP_PIN);
+  if (stepper3) {
+    stepper3 -> setDirectionPin(STEPPER3_DIR_PIN);
+    stepper3 -> setSpeedInHz(6000); // steps/sec
+    stepper3 -> setAcceleration(10000); // steps/sec^2
+  }
+
+  // Move motors to the absolute 0 position
+  stepper1->moveTo(0, false);
+  stepper2->moveTo(0, false);
+  stepper3->moveTo(0, false);
   
-  // True beginning of the program
+  // Begin the program
   Serial.println("Welcome to our motion simulation chair!");
-  promptForExperience();
+  Serial.println();
 }
 
 // With the enum of different states, we can utilize switch cases to go through the states of simulation
 void loop() {
   switch (currentState) {
     case WAIT_FOR_INPUT:
-      if (Serial.available()) {
-        String choice = Serial.readStringUntil('\n');
-        processExperienceChoice(choice);
-      }
+      getExperience();
       break;
     case WAIT_FOR_AXIS_CHOICE:
-      if (Serial.available()) {
-        String axisChoice = Serial.readStringUntil('\n');
-        axisChoice.trim();
-        processAxisChoice(axisChoice);
-      }
       break;
     case WAIT_FOR_SPEED:
-      if (Serial.available()) {
-        String speedInput = Serial.readStringUntil('\n');
-        float speed = speedInput.toFloat();
-        processSpeedInput(speed);
-      }
       break;
     case WAIT_FOR_POSITION:
-      if (Serial.available()) {
-        String posInput = Serial.readStringUntil('\n');
-        long position = posInput.toInt();
-        processPositionInput(position);
-      }
       break;
     case PROCESSING:
-      if (fullExperienceStep > 0) {
-        updateFullExperienceMotion();
-      }
-      else {
-        moveMotor(*selectedStepper);
-      }
-      checkMotionCompletion();
       break;
   }
 }
 
-// Function for getting the experience that the user wants
-void promptForExperience() {
-  Serial.println("What kind of user experience would you like?");
-  Serial.println("1: Move in one direction");
-  Serial.println("2: Full experience of motion");
-}
-
-// choice is the value provided from the promptForExperience function
 // If the user provided 1, change the state to WAIT_FOR_AXIS_CHOICE
 // If the user provided 2, change the state to PROCESSING
 // If the user didn't provide 1 or 2, do not change the state so that the program can ask the user again
-void processExperienceChoice(const String& choice) {
+void getExperience() {
+  Serial.println("What kind of user experience would you like?");
+  Serial.println("1: Move in one direction");
+  Serial.println("2: Full experience of motion");
+  Serial.println();
+
+  while (!Serial.available()) {
+  }
+  String choice = Serial.readStringUntil('\n');
+  choice.trim();
+
   if (choice == "1") {
     currentState = WAIT_FOR_AXIS_CHOICE;
-    Serial.println("Enter Axis (Pitch/Roll/Yaw):");
+    getAxis();
+
   } else if (choice == "2") {
     currentState = PROCESSING;
-    performFullExperienceMotion();
+    performFullExperienceMotion(stepper1, stepper2, stepper3);
+
   } else {
     Serial.println("Invalid choice. Please enter 1 for single direction or 2 for full experience.");
+    Serial.println();
   }
 }
 
-// axisChoice is the value provided from the processExperienceChoice function in the choice == "1" if statement
-// If a valid axisChoice is provided, update the selectedStepper for the desired axis of motion, the axis, and the currentState to get the speed
-void processAxisChoice(const String& axisChoice) {
-  if (axisChoice.equalsIgnoreCase("Pitch")) {
-    selectedStepper = &pitchStepper;
-  } else if (axisChoice.equalsIgnoreCase("Roll")) {
-    selectedStepper = &rollStepper;
+// Function to get the axis that user would like to move in
+void getAxis() { 
+  Serial.println("Enter Axis (Pitch/Roll/Yaw):");
+  Serial.println();
+
+  while (!Serial.available()) {
+  }
+  String axisChoice = Serial.readStringUntil('\n');
+  axisChoice.trim();
+
+  if (axisChoice.equalsIgnoreCase("Pitch") || axisChoice.equalsIgnoreCase("Roll")) {
+    selectedStepper1 = stepper1;
+    selectedStepper2 = stepper2;
+
   } else if (axisChoice.equalsIgnoreCase("Yaw")) {
-    selectedStepper = &yawStepper;
-  } else {
+    selectedStepper1 = stepper3;
+  } 
+
+  else {
     Serial.println("Invalid axis. Please enter Pitch, Roll, or Yaw.");
+    Serial.println();
     return;
   }
+
   currentAxis = axisChoice;
   currentState = WAIT_FOR_SPEED;
+  getSpeedAndAcceleration();
+}
+
+// Function to get the speed and acceleration that the user would like to move at
+void getSpeedAndAcceleration() {
   Serial.println("Enter the speed you want to move at (steps/second):");
-}
 
-// speed is the value provided from the processAxisChoice function at the end
-void processSpeedInput(float speed) {
-  // If the stepper is not null, the speed is greater than 0, and the speed does not exceed the maxSpeed of the stepper motor, use the setMotorSpeed function
-  // to update the speed of the specific motor. Also, ask the user for the position they want to move to and update the currentState to the WAIT_FOR_POSITION state
-  // Otherwise, the user did not provide a speed that is valid and we have to re-ask for a valid speed
-  if (selectedStepper != NULL && speed > 0 && speed <= selectedStepper->maxSpeed()) {
-    setMotorSpeed(*selectedStepper, speed);
-    Serial.println("Speed set. Enter the position (0 to maximum):");
-    currentState = WAIT_FOR_POSITION;
-  } else {
-    Serial.println("Invalid speed. Please enter a positive number up to the max speed.");
-    currentState = WAIT_FOR_SPEED;
+  while (!Serial.available()) {
   }
-}
+  String speedInput = Serial.readStringUntil('\n');
+  float speed = speedInput.toFloat();
 
-// position is the value provided from the processSpeedInput function at the end 
-void processPositionInput(long position) {
-  // If the stepper is not null, the position is greater than 0, and the position does not exceed the position of 4000 for the motor, use the setMotorPosition function
-  // to move the motor to the chosen position. Also, update the currentState to PROCESSING, as the motor is now moving and we do not want any user input.
-  if (selectedStepper != NULL && position >= 0 && position <= 4000) { // Assuming 4000 is the max
-    currentState = PROCESSING;
-    setMotorPosition(*selectedStepper, position);
-  } else {
-    Serial.println("Position out of range. Please enter a value between 0 and 4000.");
-    currentState = WAIT_FOR_POSITION;
+  Serial.println("Enter the acceleration you want to move at (steps/second^2):");
+
+  while (!Serial.available()) {
   }
-}
+  String accelerationInput = Serial.readStringUntil('\n');
+  float acceleration = accelerationInput.toFloat();
 
-// Function to update the speed of the selected motor
-void setMotorSpeed(AccelStepper& stepper, float speed) {
-  stepper.setMaxSpeed(speed);
-  Serial.print("Speed set to: ");
-  Serial.println(speed);
-}
+  // If the provided speed and acceleration are within the parameters, set the motors speed and acceleration and call the getPosition() method
+  if (speed > 0 && speed <= MAX_SPEED && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
+    if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+      setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
 
-// Function to set the position for the motor to move to
-void setMotorPosition(AccelStepper& stepper, long position) {
-  currentState = PROCESSING;  
-  stepper.moveTo(position);
-  Serial.print("Moving to position: ");
-  Serial.println(position);
-}
-
-// Function to move the motor to the desired position
-void moveMotor(AccelStepper& stepper) {
-    while (stepper.distanceToGo() != 0) {
-        stepper.run();
+    } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+      setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
     }
-}
 
-// Function to update the fullExperienceStep value to 1, so that the full experience can be started
-void performFullExperienceMotion() {
-  fullExperienceStep = 1;
-}
+    currentState = WAIT_FOR_POSITION;
+    getPosition();
 
-// Fucntion that utilizes a switch case to go through movements in all three degrees of freedom
-void updateFullExperienceMotion() {
-  // Called from the loop() function when in the PROCESSING state
-  switch (fullExperienceStep) {
-    case 1:
-      // Pitch up movement
-      setMotorPosition(pitchStepper, maxPosPitchPosition);
-      moveMotor(pitchStepper);
-      fullExperienceStep++;
-      break;
-    case 2:
-      // Pitch down movement
-      setMotorPosition(pitchStepper, maxNegPitchPosition);
-      moveMotor(pitchStepper);
-      fullExperienceStep++;
-      break;
-    case 3:
-      // Roll right movement
-      setMotorPosition(rollStepper, maxPosRollPosition);
-      moveMotor(rollStepper);
-      fullExperienceStep++;
-      break;
-    case 4:
-      // Roll left movement
-      setMotorPosition(rollStepper, maxNegRollPosition);
-      moveMotor(rollStepper);
-      fullExperienceStep++;
-      break;
-    case 5:
-      // Yaw right movement
-      setMotorPosition(yawStepper, maxNegYawPosition);
-      moveMotor(yawStepper);
-      fullExperienceStep++;
-      break;
-    case 6:
-      // Yaw left movement
-      setMotorPosition(yawStepper, maxNegYawPosition);
-      moveMotor(yawStepper);
-      fullExperienceStep++;
-      break;
+  // Otherwise, there is or are values that are not within the parameters
+  } else {
+    if (speed <= 0 && acceleration <= 0) {
+      Serial.println("Speed and acceleration values are 0 or below. Setting to minimum speed and acceleration.");
+
+      speed = 1;
+      acceleration = 1;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+
+    } else if (speed > MAX_SPEED && acceleration > MAX_ACCELERATION) {
+      Serial.println("Speed and acceleration values are above the specified limit. Setting to maximum speed and acceleration.");
+
+      speed = MAX_SPEED;
+      acceleration = MAX_ACCELERATION;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+
+    } else if (speed <= 0 && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
+      Serial.println("Speed value is 0 or below. Setting to minimum speed.");
+
+      speed = 0;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+      
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+    
+    } else if (speed > MAX_SPEED && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
+      Serial.println("Speed value is above the specified limit. Setting to maximum speed.");
+
+      speed = MAX_SPEED;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+    
+    } else if (speed > 0 && speed <= MAX_SPEED && acceleration <= 0) {
+      Serial.println("Acceleration value is 0 or below. Setting to minimum acceleration.");
+
+      acceleration = 1;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+      
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+    
+    } else if (speed > 0 && speed <= MAX_SPEED && acceleration > MAX_ACCELERATION) {
+      Serial.println("Acceleration value is above the specified limit. Setting to maximum acceleration.");
+
+      acceleration = MAX_ACCELERATION;
+
+      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+      
+      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      }
+
+      currentState = WAIT_FOR_POSITION;
+      getPosition();
+    }
   }
 }
 
-// Function to make sure the motors are done moving
-void checkMotionCompletion() {
-  // Check if all steppers have reached their target positions
-  if (!pitchStepper.isRunning() && !rollStepper.isRunning() && !yawStepper.isRunning()) {
-    Serial.println("Motion completed. Ready for new input.");
-    currentState = WAIT_FOR_INPUT; // Go back to waiting for input
-    promptForExperience(); // Prompt the user again for the experience they want
+// Function called to set the speed and acceleration for a specified stepper
+void setMotorSpeedAndAcceleration(FastAccelStepper* stepper, uint32_t speed, uint32_t acceleration) {
+  stepper->setSpeedInHz(speed); // steps/sec
+  stepper->setAcceleration(acceleration); // steps/sec^2
+}
+
+// Function to get the position the user would like to move to
+void getPosition() {
+  String positionInput; // Variable to take in the angle input from user
+  float positionInDegrees; // Variable to hold the positionInput to float conversion
+
+  // Get wanted position in degrees if axis is pitch
+  if (currentAxis.equalsIgnoreCase("Pitch")) {
+    Serial.println("Enter a position in degrees (-9.81 to 9.81): ");
+
+    while (!Serial.available()) {
+    }
+
+    positionInput = Serial.readStringUntil('\n');
+    positionInDegrees = positionInput.toFloat();
+
+    if (positionInDegrees < -9.81) {
+      positionInDegrees = -9.81;
+    
+    } else if (positionInDegrees > 9.81) {
+      positionInDegrees = 9.81;
+    }
+
+    positionInSteps = calculatePosition(positionInDegrees);
   } 
+
+  // Get wanted position in degrees if axis is roll
+  else if (currentAxis.equalsIgnoreCase("Roll")) {
+    Serial.println("Enter a position in degrees (-7.94 to 7.94): ");
+
+    while (!Serial.available()) {
+    }    
+
+    positionInput = Serial.readStringUntil('\n');
+    positionInDegrees = positionInput.toFloat();
+
+    if (positionInDegrees < -7.94) {
+      positionInDegrees = -7.94;
+    
+    } else if (positionInDegrees > 7.94) {
+      positionInDegrees = 7.94;
+    }
+
+    positionInSteps = calculatePosition(positionInDegrees);
+  }
+
+  // Get wanted position in degrees if axis is yaw
+  else if (currentAxis.equalsIgnoreCase("Yaw")) {
+    Serial.println("Enter a position in degrees (-45 to 45): ");
+
+    while (!Serial.available()) {
+    }    
+
+    positionInput = Serial.readStringUntil('\n');
+    positionInDegrees = positionInput.toFloat();
+
+    if (positionInDegrees < -45) {
+      positionInDegrees = -45;
+
+    } else if (positionInDegrees > 45) {
+      positionInDegrees = 45;
+    }
+
+    positionInSteps = calculatePosition(positionInDegrees);
+  }
+
+  // Print out the steps from the calculated degrees to steps, and call the moveMotor function to move the motor
+  currentState = WAIT_FOR_INPUT;
+  Serial.println("Position in steps: " + String(positionInSteps));
+  Serial.println();
+
+  if (currentAxis.equalsIgnoreCase("Pitch")) {
+    moveMotor(selectedStepper1, positionInSteps);
+    moveMotor(selectedStepper2, positionInSteps);
+
+  } else if (currentAxis.equalsIgnoreCase("Roll")) {
+    moveMotor(selectedStepper1, positionInSteps);
+    moveMotor(selectedStepper2, positionInSteps * -1);
+
+  } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+    moveMotor(selectedStepper1, positionInSteps);
+  }
+}
+
+// Function to calculate the number of steps needed to move to a certain number of degrees
+// positionInDegrees is the degrees to move
+// 360.0 is the degrees per revolution
+// 5 is for the 1:5 ratio due to the gearbox
+// 800 is the numbers of steps in a full rotation due to quarter-stepping
+int32_t calculatePosition(float positionInDegrees) {
+  return floor((positionInDegrees/(360.0/(5 * 800))));
+}
+
+// Function to actually move the specified motor to a specified position
+void moveMotor(FastAccelStepper* stepper, int32_t position) {
+  stepper->moveTo(position, false);
+  currentState = WAIT_FOR_INPUT;
+}
+
+// Function that moves the chair in a multi-axial experienc
+void performFullExperienceMotion(FastAccelStepper* stepper1, FastAccelStepper* stepper2, FastAccelStepper* stepper3) {
+  Serial.println("Moving all three motors!");
+  Serial.println();
+  
+  // 9.81 degress up with two motors
+  stepper1->moveTo(MAX_POS_PITCH_POSITION, false);
+  stepper2->moveTo(MAX_POS_PITCH_POSITION, true);
+
+  // Then -19.62 degrees down with two motors
+  stepper1->moveTo(MAX_NEG_PITCH_POSITION, false);
+  stepper2->moveTo(MAX_NEG_PITCH_POSITION, true);
+
+  // Then 9.81 degrees up with two motors to go back to original location
+  stepper1->moveTo(MAX_POS_PITCH_POSITION, false);
+  stepper2->moveTo(MAX_POS_PITCH_POSITION, true);
+
+  // Then 7.91 degrees up with one motor and -7.91 degrees down with the other
+  stepper1->moveTo(MAX_POS_ROLL_POSITION, false);
+  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
+
+  // Then 15.82 degrees up with one motor and -15.82 degrees down with the other
+  stepper1->moveTo(MAX_NEG_ROLL_POSITION, false);
+  stepper2->moveTo(MAX_POS_ROLL_POSITION, true);
+
+  // Then 7.91 degrees up with one motor and -7.91 degrees down with the other to go back to original location.
+  stepper1->moveTo(MAX_POS_ROLL_POSITION, false);
+  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
+
+  // Then 45 degrees yawing to the right and -45 degrees yawing to the left
+  stepper3->moveTo(MAX_POS_YAW_POSITION, true);
+  stepper3->moveTo(MAX_NEG_YAW_POSITION, true);
+
+  currentState = WAIT_FOR_INPUT;
+}
+
+// Work in progress
+void performRollerCoasterSimulation(FastAccelStepper* stepper1, FastAccelStepper* stepper2, FastAccelStepper* stepper3) {
+  Serial.println("Performing roller coaster simulation!");
+  Serial.println();
 }
