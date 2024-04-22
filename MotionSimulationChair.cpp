@@ -12,6 +12,8 @@
 
 #define MAX_SPEED 80000
 #define MAX_ACCELERATION 10000
+#define MIN_SPEED 1
+#define MIN_ACCELERATION 1
 
 #define MAX_POS_PITCH_POSITION 109 // 9.81/(360/(5 * 800))
 #define MAX_NEG_PITCH_POSITION -109
@@ -32,17 +34,23 @@ FastAccelStepper *stepper3 = nullptr;
 enum State {
   WAIT_FOR_INPUT,
   WAIT_FOR_AXIS_CHOICE,
+  WAIT_FOR_SPEED_AND_ACCELERATION,
   WAIT_FOR_POSITION,
-  WAIT_FOR_SPEED,
   PROCESSING
 };
+
+// Global variables //
 
 // Start at the first state
 State currentState = WAIT_FOR_INPUT;
 
-FastAccelStepper *selectedStepper1 = nullptr;
-FastAccelStepper *selectedStepper2 = nullptr;
+// Pitch, roll, or yaw
 String currentAxis = "";
+
+// Desired movement
+String choice = "";
+
+// The # of steps to achieve a certain position
 int32_t positionInSteps = 0;
 
 void setup() {
@@ -92,12 +100,24 @@ void loop() {
       getExperience();
       break;
     case WAIT_FOR_AXIS_CHOICE:
+      getAxis();
       break;
-    case WAIT_FOR_SPEED:
+    case WAIT_FOR_SPEED_AND_ACCELERATION:
+      getSpeedAndAcceleration();
       break;
     case WAIT_FOR_POSITION:
+      getPosition();
       break;
     case PROCESSING:
+      if (choice == "1") {
+        moveMotor(positionInSteps);
+
+      } else if (choice == "2") {
+        performFullExperienceMotion();
+
+      } else if (choice == "3") {
+        performRollerCoasterSimulation();
+      }
       break;
   }
 }
@@ -109,20 +129,19 @@ void getExperience() {
   Serial.println("What kind of user experience would you like?");
   Serial.println("1: Move in one direction");
   Serial.println("2: Full experience of motion");
+  Serial.println("3: Roller coaster simulation");
   Serial.println();
 
   while (!Serial.available()) {
   }
-  String choice = Serial.readStringUntil('\n');
+  choice = Serial.readStringUntil('\n');
   choice.trim();
 
-  if (choice == "1") {
+  if (choice.equals("1")) {
     currentState = WAIT_FOR_AXIS_CHOICE;
-    getAxis();
 
-  } else if (choice == "2") {
+  } else if (choice.equals("2") || choice.equals("3")) {
     currentState = PROCESSING;
-    performFullExperienceMotion(stepper1, stepper2, stepper3);
 
   } else {
     Serial.println("Invalid choice. Please enter 1 for single direction or 2 for full experience.");
@@ -132,37 +151,35 @@ void getExperience() {
 
 // Function to get the axis that user would like to move in
 void getAxis() { 
-  Serial.println("Enter Axis (Pitch/Roll/Yaw):");
+  Serial.println("Enter axis (Pitch/Roll/Yaw):");
   Serial.println();
 
+  // Get the desired axis of movement
   while (!Serial.available()) {
   }
   String axisChoice = Serial.readStringUntil('\n');
   axisChoice.trim();
 
-  if (axisChoice.equalsIgnoreCase("Pitch") || axisChoice.equalsIgnoreCase("Roll")) {
-    selectedStepper1 = stepper1;
-    selectedStepper2 = stepper2;
+  if (axisChoice.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll") || axisChoice.equalsIgnoreCase("Yaw")) {
+    currentAxis = axisChoice;
 
-  } else if (axisChoice.equalsIgnoreCase("Yaw")) {
-    selectedStepper1 = stepper3;
-  } 
-
-  else {
+  // Otherwise the axis is invalid and the user is asked again
+  } else {
     Serial.println("Invalid axis. Please enter Pitch, Roll, or Yaw.");
     Serial.println();
     return;
   }
 
+  // Move to getting the speed and acceleration
   currentAxis = axisChoice;
-  currentState = WAIT_FOR_SPEED;
-  getSpeedAndAcceleration();
+  currentState = WAIT_FOR_SPEED_AND_ACCELERATION;
 }
 
 // Function to get the speed and acceleration that the user would like to move at
 void getSpeedAndAcceleration() {
   Serial.println("Enter the speed you want to move at (steps/second):");
 
+  // Get the desired speed
   while (!Serial.available()) {
   }
   String speedInput = Serial.readStringUntil('\n');
@@ -170,6 +187,7 @@ void getSpeedAndAcceleration() {
 
   Serial.println("Enter the acceleration you want to move at (steps/second^2):");
 
+  // Get the desired accleration
   while (!Serial.available()) {
   }
   String accelerationInput = Serial.readStringUntil('\n');
@@ -178,34 +196,20 @@ void getSpeedAndAcceleration() {
   // If the provided speed and acceleration are within the parameters, set the motors speed and acceleration and call the getPosition() method
   if (speed > 0 && speed <= MAX_SPEED && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
     if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-      setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
+      setMotorSpeedAndAcceleration(stepper1, speed, acceleration);
+      setMotorSpeedAndAcceleration(stepper2, speed, acceleration);
 
     } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-      setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
+      setMotorSpeedAndAcceleration(stepper3, speed, acceleration);
     }
-
-    currentState = WAIT_FOR_POSITION;
-    getPosition();
 
   // Otherwise, there is or are values that are not within the parameters
   } else {
     if (speed <= 0 && acceleration <= 0) {
       Serial.println("Speed and acceleration values are 0 or below. Setting to minimum speed and acceleration.");
 
-      speed = 1;
-      acceleration = 1;
-
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
-
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
+      speed = MIN_SPEED;
+      acceleration = MIN_ACCELERATION;
 
     } else if (speed > MAX_SPEED && acceleration > MAX_ACCELERATION) {
       Serial.println("Speed and acceleration values are above the specified limit. Setting to maximum speed and acceleration.");
@@ -213,86 +217,43 @@ void getSpeedAndAcceleration() {
       speed = MAX_SPEED;
       acceleration = MAX_ACCELERATION;
 
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
-
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
-
     } else if (speed <= 0 && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
       Serial.println("Speed value is 0 or below. Setting to minimum speed.");
 
-      speed = 0;
-
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-      
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
-
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
+      speed = MIN_SPEED;
     
     } else if (speed > MAX_SPEED && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
       Serial.println("Speed value is above the specified limit. Setting to maximum speed.");
 
       speed = MAX_SPEED;
 
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
-
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
-    
     } else if (speed > 0 && speed <= MAX_SPEED && acceleration <= 0) {
       Serial.println("Acceleration value is 0 or below. Setting to minimum acceleration.");
 
-      acceleration = 1;
-
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-      
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
-
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
+      acceleration = MIN_ACCELERATION;
     
     } else if (speed > 0 && speed <= MAX_SPEED && acceleration > MAX_ACCELERATION) {
       Serial.println("Acceleration value is above the specified limit. Setting to maximum acceleration.");
 
       acceleration = MAX_ACCELERATION;
+    }
 
-      if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-        setMotorSpeedAndAcceleration(selectedStepper2, speed, acceleration);
-      
-      } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-        setMotorSpeedAndAcceleration(selectedStepper1, speed, acceleration);
-      }
+    // With the fixed speeds and accelerations, we can set the speed and acceleration of the motor(s)
+    if (currentAxis.equalsIgnoreCase("Pitch") || currentAxis.equalsIgnoreCase("Roll")) {
+      setMotorSpeedAndAcceleration(stepper1, speed, acceleration);
+      setMotorSpeedAndAcceleration(stepper2, speed, acceleration);
 
-      currentState = WAIT_FOR_POSITION;
-      getPosition();
+    } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+      setMotorSpeedAndAcceleration(stepper3, speed, acceleration);
     }
   }
+
+  // Move to getting the desired position
+  currentState = WAIT_FOR_POSITION;
 }
 
 // Function called to set the speed and acceleration for a specified stepper
-void setMotorSpeedAndAcceleration(FastAccelStepper* stepper, uint32_t speed, uint32_t acceleration) {
+void setMotorSpeedAndAcceleration(FastAccelStepper* stepper, float speed, float acceleration) {
   stepper->setSpeedInHz(speed); // steps/sec
   stepper->setAcceleration(acceleration); // steps/sec^2
 }
@@ -318,8 +279,6 @@ void getPosition() {
     } else if (positionInDegrees > 9.81) {
       positionInDegrees = 9.81;
     }
-
-    positionInSteps = calculatePosition(positionInDegrees);
   } 
 
   // Get wanted position in degrees if axis is roll
@@ -338,8 +297,6 @@ void getPosition() {
     } else if (positionInDegrees > 7.94) {
       positionInDegrees = 7.94;
     }
-
-    positionInSteps = calculatePosition(positionInDegrees);
   }
 
   // Get wanted position in degrees if axis is yaw
@@ -358,26 +315,13 @@ void getPosition() {
     } else if (positionInDegrees > 45) {
       positionInDegrees = 45;
     }
-
-    positionInSteps = calculatePosition(positionInDegrees);
   }
 
-  // Print out the steps from the calculated degrees to steps, and call the moveMotor function to move the motor
-  currentState = WAIT_FOR_INPUT;
+  positionInSteps = calculatePosition(positionInDegrees);
+
   Serial.println("Position in steps: " + String(positionInSteps));
   Serial.println();
-
-  if (currentAxis.equalsIgnoreCase("Pitch")) {
-    moveMotor(selectedStepper1, positionInSteps);
-    moveMotor(selectedStepper2, positionInSteps);
-
-  } else if (currentAxis.equalsIgnoreCase("Roll")) {
-    moveMotor(selectedStepper1, positionInSteps);
-    moveMotor(selectedStepper2, positionInSteps * -1);
-
-  } else if (currentAxis.equalsIgnoreCase("Yaw")) {
-    moveMotor(selectedStepper1, positionInSteps);
-  }
+  currentState = PROCESSING;
 }
 
 // Function to calculate the number of steps needed to move to a certain number of degrees
@@ -390,49 +334,171 @@ int32_t calculatePosition(float positionInDegrees) {
 }
 
 // Function to actually move the specified motor to a specified position
-void moveMotor(FastAccelStepper* stepper, int32_t position) {
-  stepper->moveTo(position, false);
-  currentState = WAIT_FOR_INPUT;
+void moveMotor(int32_t position) {
+  if (currentAxis.equalsIgnoreCase("Pitch")) {
+    stepper1 -> moveTo(position, false);
+    stepper2 -> moveTo(position, true);
+
+    stepper1 -> moveTo(position * -1, false);
+    stepper2 -> moveTo(position * -1, true);
+
+    stepper1 -> moveTo(0, false);
+    stepper2 -> moveTo(0, true);
+
+  } else if (currentAxis.equalsIgnoreCase("Roll")) {
+    stepper1 -> moveTo(position, false);
+    stepper2 -> moveTo(position * -1, true);
+
+    stepper1 -> moveTo(position * -1, false);
+    stepper2 -> moveTo(position, true);
+
+    stepper1 -> moveTo(0, false);
+    stepper2 -> moveTo(0, true);
+
+  } else if (currentAxis.equalsIgnoreCase("Yaw")) {
+    stepper3 -> moveTo(position, true);
+
+    stepper3 -> moveTo(position * -1, true);
+
+    stepper3 -> moveTo(0, true);
+  }
 }
 
-// Function that moves the chair in a multi-axial experienc
-void performFullExperienceMotion(FastAccelStepper* stepper1, FastAccelStepper* stepper2, FastAccelStepper* stepper3) {
+// Function that moves the chair in a multi-axial experience
+void performFullExperienceMotion() {
   Serial.println("Moving all three motors!");
   Serial.println();
   
   // 9.81 degress up with two motors
-  stepper1->moveTo(MAX_POS_PITCH_POSITION, false);
-  stepper2->moveTo(MAX_POS_PITCH_POSITION, true);
-
   // Then -19.62 degrees down with two motors
-  stepper1->moveTo(MAX_NEG_PITCH_POSITION, false);
-  stepper2->moveTo(MAX_NEG_PITCH_POSITION, true);
-
   // Then 9.81 degrees up with two motors to go back to original location
-  stepper1->moveTo(MAX_POS_PITCH_POSITION, false);
-  stepper2->moveTo(MAX_POS_PITCH_POSITION, true);
+  currentAxis = "pitch";
+  moveMotor(MAX_POS_PITCH_POSITION);
 
-  // Then 7.91 degrees up with one motor and -7.91 degrees down with the other
-  stepper1->moveTo(MAX_POS_ROLL_POSITION, false);
-  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
-
+  // 7.91 degrees up with one motor and -7.91 degrees down with the other
   // Then 15.82 degrees up with one motor and -15.82 degrees down with the other
-  stepper1->moveTo(MAX_NEG_ROLL_POSITION, false);
-  stepper2->moveTo(MAX_POS_ROLL_POSITION, true);
-
   // Then 7.91 degrees up with one motor and -7.91 degrees down with the other to go back to original location.
-  stepper1->moveTo(MAX_POS_ROLL_POSITION, false);
-  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
+  currentAxis = "roll";
+  moveMotor(MAX_POS_ROLL_POSITION); 
 
-  // Then 45 degrees yawing to the right and -45 degrees yawing to the left
-  stepper3->moveTo(MAX_POS_YAW_POSITION, true);
-  stepper3->moveTo(MAX_NEG_YAW_POSITION, true);
+  // 45 degrees yawing to the right
+  // Then -90 degrees yawing to the left
+  // Then 45 degrees yawing back to the original position
+  currentAxis = "yaw";
+  moveMotor(MAX_POS_YAW_POSITION);
 
   currentState = WAIT_FOR_INPUT;
 }
 
-// Work in progress
-void performRollerCoasterSimulation(FastAccelStepper* stepper1, FastAccelStepper* stepper2, FastAccelStepper* stepper3) {
-  Serial.println("Performing roller coaster simulation!");
+// Function that mimics what it would be like to be on a roller coaster
+void performRollerCoasterSimulation() {
+  Serial.println("Performing advanced roller coaster simulation!");
   Serial.println();
+
+  // Slow initial climb, a level out, and pause at the top
+  slowClimb();
+  levelOut();
+  delay(2000);
+
+  // First major hill 
+  fastFall();
+  levelOut();
+  fastClimb();
+  levelOut();
+
+  gentleDip();
+  for (int i = 0; i < 3; i++) {
+    smallHill();
+  }
+
+  sharpTurn();
+  suddenTwist();
+  fastFall();
+  levelOut();
+
+  Serial.println("Roller coaster simulation complete!");
+  currentState = WAIT_FOR_INPUT;
+}
+
+void slowClimb() {
+  setMotorSpeedAndAcceleration(stepper1, 1000, 500);
+  setMotorSpeedAndAcceleration(stepper2, 1000, 500);
+  int climbingHeight;
+
+  for (int i = 1; i <= 10; i++) {
+    climbingHeight = MAX_POS_PITCH_POSITION * (0.1 * i);
+    stepper1->moveTo(climbingHeight, false);
+    rumble();
+    stepper2->moveTo(climbingHeight, true);
+    delay(250);
+  }
+}
+
+void fastClimb () {
+
+}
+
+void levelOut() {
+  int currentHeight = stepper1.getCurrentHeight();
+  int levelingHeight;
+
+  uint32_t speed1 = stepper1 -> getSpeedInHz();
+  uint32_t speed2 = stepper2 -> getSpeedInHz();
+  uint32_t averageSpeed = (speed1 + speed2) / 2;
+
+  // Height lveling factor. The faster the speed, the smaller the leveling factor and vice versa
+  float levelingFactor = max(0.01, 1.0 - (averageSpeed / 1000.0));
+
+  // The faster the speed, the longer the delay between each level out and vice versa
+  int delay = min(500, max(100, int(averageSpeed / 20))); // Delay ranging from 100ms to 500ms
+
+  for (int i = 9; i >= 0; i--) {
+    levelingHeight = currentHeight * levelingFactor * i;
+    stepper1 -> moveTo(levelingHeight, false);
+    stepper2 -> moveTo(levelingHeight, true);
+    delay(delay)
+  }
+}
+
+void fastFall() {
+  setMotorSpeedAndAcceleration(stepper1, 3000, 1500);
+  setMotorSpeedAndAcceleration(stepper2, 3000, 1500);
+
+  int fallingHeight = -MAX_NEG_PITCH_POSITION;
+  stepper1 -> moveTo(fallingHeight, false);
+  stepper2 -> moveTo(fallingHeight, true);
+  delay(1000);
+}
+
+void gentleDip() {
+
+}
+
+void sharpTurn() {
+
+}
+
+void suddenTwist() {
+
+}
+
+void rumble() {
+  int pitchIntensity = 5;
+  int rollInensity = 5;
+  int yawIntensity = 10; 
+  int duration = 1500; // Duration of rumble
+  unsigned long startTime = millis();
+
+  // Fast acceleration for quick response
+  stepper1 -> setAcceleration(3000);
+  stepper2 -> setAcceleration(3000);
+  stepper3 -> setAcceleration(3000);
+
+  // Randomly vary the intensity and direction of the steps
+  while (millis() - startTime < duration) {
+    stepper1 -> move(random(-pitchIntensity, pitchIntensity), false);
+    stepper2 -> move(random(-rollIntensity, rollIntensity), false);
+    stepper3 -> move(random(-yawIntensity, yawIntensity), false);
+    delay(50); // Short delay between the shakes
+  }
 }
