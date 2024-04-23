@@ -15,14 +15,14 @@
 #define MIN_SPEED 1
 #define MIN_ACCELERATION 1
 
-#define MAX_POS_PITCH_POSITION 97 // 9.81/(360/(5 * 200))
-#define MAX_NEG_PITCH_POSITION -97
+#define MAX_POS_PITCH_POSITION 83 // 30/(360/(5 * 200))
+#define MAX_NEG_PITCH_POSITION -83
 
-#define MAX_POS_ROLL_POSITION 97 // 7.94/(360/(5 * 200))
-#define MAX_NEG_ROLL_POSITION -97
+#define MAX_POS_ROLL_POSITION 83 // 30/(360/(5 * 200))
+#define MAX_NEG_ROLL_POSITION -83
 
-#define MAX_POS_YAW_POSITION 500 // 45/(360/(5 * 200))
-#define MAX_NEG_YAW_POSITION -500
+#define MAX_POS_YAW_POSITION 125 // 45/(360/(5 * 200))
+#define MAX_NEG_YAW_POSITION -125
 
 // Create the engine and the steppers
 FastAccelStepperEngine engine = FastAccelStepperEngine();
@@ -135,6 +135,7 @@ void getExperience() {
   Serial.println("3: Roller coaster simulation");
   Serial.println();
 
+  // Get the desired movement
   while (!Serial.available()) {
   }
   choice = Serial.readStringUntil('\n');
@@ -181,6 +182,7 @@ void getAxis() {
 // Function to get the speed and acceleration that the user would like to move at
 void getSpeedAndAcceleration() {
   Serial.println("Enter the speed you want to move at (steps/second):");
+  Serial.println();
 
   // Get the desired speed
   while (!Serial.available()) {
@@ -189,6 +191,7 @@ void getSpeedAndAcceleration() {
   float speed = speedInput.toFloat();
 
   Serial.println("Enter the acceleration you want to move at (steps/second^2):");
+  Serial.println();
 
   // Get the desired accleration
   while (!Serial.available()) {
@@ -209,34 +212,40 @@ void getSpeedAndAcceleration() {
   // Otherwise, there is or are values that are not within the parameters
   } else {
     if (speed <= 0 && acceleration <= 0) {
-      Serial.println("Speed and acceleration values are 0 or below. Setting to minimum speed and acceleration.");
+      Serial.println("Speed and acceleration values are 0 or below. Setting to " + String(MIN_SPEED) + " steps/s and " + String(MIN_ACCELERATION) + " steps/s^2.");
+      Serial.println();
 
       speed = MIN_SPEED;
       acceleration = MIN_ACCELERATION;
 
     } else if (speed > MAX_SPEED && acceleration > MAX_ACCELERATION) {
-      Serial.println("Speed and acceleration values are above the specified limit. Setting to maximum speed and acceleration.");
+      Serial.println("Speed and acceleration values are above the specified limit. Setting to " + String(MAX_SPEED) + " steps/s and " + String(MAX_ACCELERATION) + " steps/s^2.");
+      Serial.println();
 
       speed = MAX_SPEED;
       acceleration = MAX_ACCELERATION;
 
     } else if (speed <= 0 && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
-      Serial.println("Speed value is 0 or below. Setting to minimum speed.");
+      Serial.println("Speed value is 0 or below. Setting to " + String(MIN_SPEED) + " steps/s.");
+      Serial.println();
 
       speed = MIN_SPEED;
     
     } else if (speed > MAX_SPEED && acceleration > 0 && acceleration <= MAX_ACCELERATION) {
-      Serial.println("Speed value is above the specified limit. Setting to maximum speed.");
+      Serial.println("Speed value is above the specified limit. Setting to " + String(MAX_SPEED) + " steps/s.");
+      Serial.println();
 
       speed = MAX_SPEED;
 
     } else if (speed > 0 && speed <= MAX_SPEED && acceleration <= 0) {
-      Serial.println("Acceleration value is 0 or below. Setting to minimum acceleration.");
+      Serial.println("Acceleration value is 0 or below. Setting to " + String(MIN_ACCELERATION) + " steps/s^2.");
+      Serial.println();
 
       acceleration = MIN_ACCELERATION;
     
     } else if (speed > 0 && speed <= MAX_SPEED && acceleration > MAX_ACCELERATION) {
-      Serial.println("Acceleration value is above the specified limit. Setting to maximum acceleration.");
+      Serial.println("Acceleration value is above the specified limit. Setting to " + String(MAX_ACCELERATION) + " steps/s^2.");
+      Serial.println();
 
       acceleration = MAX_ACCELERATION;
     }
@@ -268,7 +277,8 @@ void getPosition() {
 
   // Get wanted position in degrees if axis is pitch
   if (currentAxis.equalsIgnoreCase("Pitch")) {
-    Serial.println("Enter a position in degrees (-35 to 35): ");
+    Serial.println("Enter a position in degrees (-30 to 30): ");
+    Serial.println();
 
     while (!Serial.available()) {
     }
@@ -276,17 +286,18 @@ void getPosition() {
     positionInput = Serial.readStringUntil('\n');
     positionInDegrees = positionInput.toFloat();
 
-    if (positionInDegrees < -35) {
-      positionInDegrees = -35;
+    if (positionInDegrees < -30) {
+      positionInDegrees = -30;
     
-    } else if (positionInDegrees > 35) {
-      positionInDegrees = 35;
+    } else if (positionInDegrees > 30) {
+      positionInDegrees = 30;
     }
   } 
 
   // Get wanted position in degrees if axis is roll
   else if (currentAxis.equalsIgnoreCase("Roll")) {
-    Serial.println("Enter a position in degrees (-35 to 35): ");
+    Serial.println("Enter a position in degrees (-30 to 30): ");
+    Serial.println();
 
     while (!Serial.available()) {
     }    
@@ -294,17 +305,18 @@ void getPosition() {
     positionInput = Serial.readStringUntil('\n');
     positionInDegrees = positionInput.toFloat();
 
-    if (positionInDegrees < -35) {
-      positionInDegrees = -35;
+    if (positionInDegrees < -30) {
+      positionInDegrees = -30;
     
-    } else if (positionInDegrees > 35) {
-      positionInDegrees = 35;
+    } else if (positionInDegrees > 30) {
+      positionInDegrees = 30;
     }
   }
 
   // Get wanted position in degrees if axis is yaw
   else if (currentAxis.equalsIgnoreCase("Yaw")) {
     Serial.println("Enter a position in degrees (-45 to 45): ");
+    Serial.println();
 
     while (!Serial.available()) {
     }    
@@ -373,15 +385,15 @@ void performFullExperienceMotion() {
   Serial.println("Moving all three motors!");
   Serial.println();
   
-  // 9.81 degress up with two motors
-  // Then -19.62 degrees down with two motors
-  // Then 9.81 degrees up with two motors to go back to original location
+  // 30 degress up with two motors
+  // Then -60 degrees down with two motors
+  // Then 30 degrees up with two motors to go back to original location
   currentAxis = "pitch";
   moveMotor(MAX_POS_PITCH_POSITION);
 
-  // 7.91 degrees up with one motor and -7.91 degrees down with the other
-  // Then 15.82 degrees up with one motor and -15.82 degrees down with the other
-  // Then 7.91 degrees up with one motor and -7.91 degrees down with the other to go back to original location.
+  // 30 degrees up with one motor and -30 degrees down with the other
+  // Then 30 degrees up with one motor and -30 degrees down with the other
+  // Then 30 degrees up with one motor and -30 degrees down with the other to go back to original location.
   currentAxis = "roll";
   moveMotor(MAX_POS_ROLL_POSITION); 
 
@@ -399,38 +411,74 @@ void performFullExperienceMotion() {
 void performRollerCoasterSimulation() {
   Serial.println("Starting Roller Coaster Simulation...");
 
-  // Slow ascent with a 2 second pause at the top
+  // Begin with a slow climb to the first peak
+  Serial.println("Climbing to the first peak...");
   slowClimb();
-  levelOut();
-  delay(2000);
+  rumble(60); // 3 seconds of rumbles as it climbs
 
-  // First steep fall
+  // Level out at the first peak
+  Serial.println("Leveling out at the peak...");
+  levelOut();
+  rumble(20); // Little 1 second rumble at the peak
+
+  // The first major drop
+  Serial.println("Descending the first major drop...");
   fastFall();
+  rumble(40); // 2 seconds of rumbles as it falls 
+
+  // Level out at the bottom
+  Serial.println("Leveling out after the drop...");
   levelOut();
 
-  // Series of rolling hills
-  for (int i = 0; i < 2; i++) {
-    fastClimb();
-    gentleDip();
+  // A series of smaller hills and dips
+  Serial.println("Navigating smaller hills...");
+  for (int i = 0; i < 4; i++) {
+      smallHill();
+      gentleDip();
+      if (i % 2 == 0) {
+        rumble(10); // Half second rumbles on every second hill
+      }
   }
 
-  // A high-speed banked turn with a sudden twist
-  sharpTurn();
+  // Level out after last dip
+  Serial.println("Leveling out after hills and dips...");
+  levelOut();
+
+  // Introduce a sharp turn
+  Serial.println("Executing a sharp turn...");
+  sharpRightTurn();
+  rumble(20); // Rumble after turning right
+  sharpLeftTurn();
+  rumble(20); // Rumble after turning left
+  stepper3 -> moveTo(0, true);
+
+  // Add a sudden twist for extra thrill
+  Serial.println("Adding a sudden twist...");
   suddenTwist();
+  rumble(20); // Rumble after twists
+  levelOut();
+
+  // Simulate a fast climb to another peak
+  Serial.println("Fast climbing to another peak...");
+  fastClimb();
+  rumble(40); // 2 second rumble while climbing
+
+  // Level out at the second peak
+  Serial.println("Leveling out at the second peak...");
+  levelOut();
+
+  // Final major fall
+  Serial.println("Descending the final major fall...");
   fastFall();
+  rumble(60); // 3 second rumble while going down the last hill
+
+  // Level out at the bottom to end the ride
+  Serial.println("Leveling out to end the ride...");
   levelOut();
 
-  // A series of gentle dips and climbs
-  for (int i = 0; i < 3; i++) {
-    gentleDip();
-    smallHill();
-  }
-
-  // Slow ascent and level out to close out the end of the ride
-  slowClimb();
-  levelOut();
-
+  // End of the simulation
   Serial.println("Roller Coaster Ride Complete!");
+
   currentState = WAIT_FOR_INPUT;
 }
 
@@ -441,51 +489,41 @@ void slowClimb() {
 
   for (int i = 1; i <= 10; i++) {
     climbingHeight = MAX_NEG_PITCH_POSITION * (0.1 * i);
-    stepper1->moveTo(climbingHeight, false);
-    stepper2->moveTo(climbingHeight, true);
+    stepper1 -> moveTo(climbingHeight, false);
+    stepper2 -> moveTo(climbingHeight, true);
     delay(100);
   }
+  delay(1000);
 }
 
 void fastClimb() {
-    // Set a higher speed and acceleration for a faster climb experience
     setMotorSpeedAndAcceleration(stepper1, 2000, 1000); 
     setMotorSpeedAndAcceleration(stepper2, 2000, 1000);
 
-    // Define the target height for the climb. This should be the maximum achievable height
-    // that simulates the roller coaster's climb effectively and safely within your setup limits.
     int climbingHeight = MAX_NEG_PITCH_POSITION;
 
-    // Move the steppers to the target height. Assuming here we want both steppers to synchronize their movements
-    stepper1->moveTo(climbingHeight, false);
-    stepper2->moveTo(climbingHeight, true); // The true parameter will make stepper2's movement blocking
+    stepper1 -> moveTo(climbingHeight, false);
+    stepper2 -> moveTo(climbingHeight, true);
 
-    // Optionally, you can add a delay if needed, or handle synchronization differently depending on your exact setup.
-    // For example, wait for both steppers to reach the target position if not using blocking moves:
-    while (stepper1->isRunning() || stepper2->isRunning()) {
-        delay(10); // Short delay to periodically check if steppers have finished moving
-    }
-
-    // After reaching the peak, you might want to simulate a brief pause at the top to enhance the thrill.
-    delay(1000); // Pause for effect at the top
+    delay(2000);
 }
 
 void levelOut() {
-    int currentHeight = stepper1->getCurrentPosition();  // Ensure this function exists or is accurately tracked
+    int currentHeight = stepper1->getCurrentPosition();
     int levelingHeight;
 
-    uint32_t speed1 = stepper1->getSpeedInMilliHz() * 1000;
-    uint32_t speed2 = stepper2->getSpeedInMilliHz() * 1000;
+    uint32_t speed1 = stepper1 -> getSpeedInMilliHz() * 1000;
+    uint32_t speed2 = stepper2 -> getSpeedInMilliHz() * 1000;
     uint32_t averageSpeed = (speed1 + speed2) / 2;
 
-    // Height leveling factor: the faster the speed, the smaller the leveling factor
+    // The faster the speed, the smaller the leveling factor
     float levelingFactor = max(0.01, 1.0 - (averageSpeed / 1000.0));
 
-    // The faster the speed, the longer the delay between each level out (consider adjusting logic if needed)
-    int dynamicDelay = min(500, max(100, int(averageSpeed / 20)));  // Delay ranges from 100ms to 500ms
+    // The faster the speed, the longer the delay between each level out
+    int dynamicDelay = min(500, max(100, int(averageSpeed / 10))); 
 
     for (int i = 9; i >= 0; i--) {
-        levelingHeight = int(currentHeight * levelingFactor * i / 9);  // Use int to ensure stepper compatibility
+        levelingHeight = int(currentHeight * levelingFactor * i / 9);
         stepper1->moveTo(levelingHeight, false);
         stepper2->moveTo(levelingHeight, true);
         delay(dynamicDelay);
@@ -497,59 +535,62 @@ void fastFall() {
   setMotorSpeedAndAcceleration(stepper2, 3000, 1500);
 
   int fallingHeight = MAX_POS_PITCH_POSITION;
+
   stepper1 -> moveTo(fallingHeight, false);
   stepper2 -> moveTo(fallingHeight, true);
-  delay(1000);
+  delay(2000);
 }
 
 void gentleDip() {
     int midHeight = MAX_POS_PITCH_POSITION / 2;
-    stepper1->moveTo(midHeight, false);
-    stepper2->moveTo(midHeight, true);
-    delay(500);  // Adjust timing as needed
-    stepper1->moveTo(0, false);
-    stepper2->moveTo(0, true);
+
+    stepper1 -> moveTo(midHeight, false);
+    stepper2 -> moveTo(midHeight, true);
     delay(500);
 }
 
 void smallHill() {
     int hillHeight = MAX_NEG_PITCH_POSITION / 2;
-    stepper1->moveTo(hillHeight, false);
-    stepper2->moveTo(hillHeight, true);
-    delay(500);
-    stepper1->moveTo(0, false);
-    stepper2->moveTo(0, true);
+
+    stepper1 -> moveTo(hillHeight, false);
+    stepper2 -> moveTo(hillHeight, true);
     delay(500);
 }
 
-void sharpTurn() {
-    stepper3->setSpeedInHz(2000);  // Fast speed for a sharp turn
-    stepper3->setAcceleration(1000);
-    stepper3->moveTo(MAX_POS_YAW_POSITION, true);
+void sharpRightTurn() {
+    setMotorSpeedAndAcceleration(stepper3, 2000, 1000);
+
+    stepper3 -> moveTo(MAX_POS_YAW_POSITION, true);
     delay(300);
-    stepper3->moveTo(MAX_NEG_YAW_POSITION, true);
+}
+
+void sharpLeftTurn() {
+    setMotorSpeedAndAcceleration(stepper3, 2000, 1000);
+
+    stepper3 -> moveTo(MAX_NEG_YAW_POSITION, true);
     delay(300);
-    stepper3->moveTo(0, true);
 }
 
 void suddenTwist() {
-  stepper1->setSpeedInHz(2000);
-  stepper1->moveTo(MAX_POS_ROLL_POSITION, false);
-  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
+  stepper1 -> setSpeedInHz(2000);
+
+  stepper1 -> moveTo(MAX_POS_ROLL_POSITION, false);
+  stepper2 -> moveTo(MAX_NEG_ROLL_POSITION, true);
   delay(200);
-  stepper1->moveTo(-MAX_POS_ROLL_POSITION, false);
-  stepper2->moveTo(MAX_NEG_ROLL_POSITION, true);
+
+  stepper1 -> moveTo(-MAX_POS_ROLL_POSITION, false);
+  stepper2 -> moveTo(-MAX_NEG_ROLL_POSITION, true);
   delay(200);
-  stepper1->moveTo(0, false);
-  stepper2->moveTo(0, true);
 }
 
-void rumble() {
+void rumble(int numberOfRumbles) {
   int pitchIntensity = 20;
   int rollIntensity = 30;
   int yawIntensity = 30; 
-  int duration = 2000; // Duration of rumble
-  unsigned long startTime = millis();
+  
+  int32_t pitchCurrentPosition = stepper1 -> getCurrentPosition();
+  int32_t rollCurrentPosition = stepper2 -> getCurrentPosition();
+  int32_t yawCurrentPosition = stepper3 -> getCurrentPosition();
 
   // Fast acceleration for quick response
   stepper1 -> setSpeedInHz(1000);
@@ -562,14 +603,18 @@ void rumble() {
   stepper3 -> setAcceleration(1000);
 
   // Randomly vary the intensity and direction of the steps
-  while (millis() - startTime < duration) {
+  for (int i = 0; i < numberOfRumbles; i++) {
     stepper1 -> move(random(-pitchIntensity, pitchIntensity), false);
     stepper2 -> move(random(-rollIntensity, rollIntensity), false);
     stepper3 -> move(random(-yawIntensity, yawIntensity), true);
     delay(50); // Short delay between the shakes
   }
+  
+  while (stepper1 -> isRunning() || stepper2 -> isRunning() || stepper3 -> isRunning()) {
+    delay(10);
+  }
 
-  stepper1 -> moveTo(0, true);
-  stepper2 -> moveTo(0, true);
-  stepper3 -> moveTo(0, true);
+  stepper1 -> moveTo(pitchCurrentPosition, true);
+  stepper2 -> moveTo(rollCurrentPosition, true);
+  stepper3 -> moveTo(yawCurrentPosition, true);
 }
