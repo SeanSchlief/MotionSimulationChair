@@ -11,6 +11,7 @@ Welcome to our **Motion Simulation Chair** project! This repository contains the
 5. [Setup](#setup)
 6. [Usage](#usage)
 7. [Contributors](#contributors)
+8. [License](#license)
 
 ## Project Overview
 
@@ -77,3 +78,7 @@ This project was developed by:
 - John Cook
 - Sean Schlief
 - Charles Zipperer
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
