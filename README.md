@@ -69,7 +69,7 @@ The Motion Simulation Chair is a fully-functional, open-source, and modular prod
    - For the other experiences, the motion profiles are predefined.
 
 4. **Reset**:
-   - After completing an experience, you can select a new one or reset the chair to its initial position.
+   - After completing an experience, you can select a new one or close the program.
 
 ## Contributors
 
