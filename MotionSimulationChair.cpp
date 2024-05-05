@@ -331,7 +331,7 @@ void getPosition() {
 
   // Get wanted position in degrees if axis is yaw
   else if (currentAxis.equalsIgnoreCase("Yaw")) {
-    Serial.println("Enter a position in degrees (-45 to 45): ");
+    Serial.println("Enter a position in degrees (-20 to 20): ");
     Serial.println();
     while (!Serial.available()) {
     }    
